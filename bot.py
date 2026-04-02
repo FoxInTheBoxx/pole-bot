@@ -18,7 +18,7 @@ TRAINING_HOUR = 21
 # =========================
 # 📊 ЗАГРУЗКА ПРОГРАММЫ
 # =========================
-df = pd.read_excel("program.xlsx", header=[0, 1])
+df = pd.read_excel("fox_pole_pro.xlsx", header=[0, 1])
 df.columns = df.columns.map(lambda x: (x[0].strip(), x[1].strip()))
 
 # =========================
