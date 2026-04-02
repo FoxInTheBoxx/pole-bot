@@ -37,17 +37,31 @@ def get_current_week():
 # 📊 ПОЛУЧЕНИЕ ПРОГРАММЫ
 # =========================
 def get_program():
+    def get_program():
     week = get_current_week()
     rows = df[df["Неделя"] == week]
 
-    categories = ["Сила", "Гибкость", "Крутки", "Подкачка"]
-
     program = {}
 
-    for cat in categories:
-        f1 = rows[f"{cat}_Фит1"].dropna().tolist()
-        f2 = rows[f"{cat}_Фит2"].dropna().tolist()
-        program[cat] = (f1, f2)
+    program["Сила"] = (
+        rows["Сила"]["Фит 1"].dropna().tolist(),
+        rows["Сила"]["Фит 2"].dropna().tolist()
+    )
+
+    program["Гибкость"] = (
+        rows["Гибкость"]["Фит 1"].dropna().tolist(),
+        rows["Гибкость"]["Фит 2"].dropna().tolist()
+    )
+
+    program["Крутки"] = (
+        rows["Крутки"]["Фит 1"].dropna().tolist(),
+        rows["Крутки"]["Фит 2"].dropna().tolist()
+    )
+
+    program["Подкачка"] = (
+        rows["Подкачка"]["Фит 1"].dropna().tolist(),
+        rows["Подкачка"]["Фит 2"].dropna().tolist()
+    )
 
     return program, week
 
