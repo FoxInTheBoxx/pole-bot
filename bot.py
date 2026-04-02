@@ -16,7 +16,8 @@ from telegram.ext import (
 # =========================
 # ⚙️ НАСТРОЙКИ
 # =========================
-TOKEN = "8724044213:AAHzltZdQnaSn_ou30Ohbd8v2rDtPpyuG1Q"
+
+TOKEN = os.getenv("8724044213:AAHzltZdQnaSn_ou30Ohbd8v2rDtPpyuG1Q")
 
 ADMIN_ID = 705855212  # ← ВСТАВЬ СВОЙ ID
 ALLOWED_USERS = [ADMIN_ID]
