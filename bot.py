@@ -22,8 +22,8 @@ ADMIN_ID = 705855212  # ← ВСТАВЬ СВОЙ ID
 ALLOWED_USERS = [ADMIN_ID]
 
 # файл с программой
-df = pd.read_excel("fox_pole_pro.xlsx")
-
+df = pd.read_excel("program.xlsx", header=[0, 1])
+df.columns = df.columns.map(lambda x: (x[0].strip(), x[1].strip()))
 
 # =========================
 # 📅 ОПРЕДЕЛЕНИЕ НЕДЕЛИ
