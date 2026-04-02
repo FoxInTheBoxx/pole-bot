@@ -12,22 +12,22 @@ TOKEN = "8724044213:AAHzltZdQnaSn_ou30Ohbd8v2rDtPpyuG1Q"
 ADMIN_ID = 705855212
 
 MAX_PLACES = 6
-TRAINING_DAY = 3
+TRAINING_DAY = 3  # четверг
 TRAINING_HOUR = 21
 
+BOOKINGS_FILE = "bookings.csv"
+
 # =========================
-# 📊 ЗАГРУЗКА ПРОГРАММЫ
+# 📊 ЗАГРУЗКА EXCEL
 # =========================
 df = pd.read_excel("fox_pole_pro.xlsx", header=[0, 1])
 df.columns = df.columns.map(lambda x: (str(x[0]).strip(), str(x[1]).strip()))
 
 # =========================
-# 📁 БАЗА ЗАПИСИ
+# 📁 БАЗА
 # =========================
-BOOKINGS_FILE = "bookings.csv"
-
 if not os.path.exists(BOOKINGS_FILE):
-    pd.DataFrame(columns=["user_id", "status", "timestamp"]).to_csv(BOOKINGS_FILE, index=False)
+    pd.DataFrame(columns=["user_id", "status", "date"]).to_csv(BOOKINGS_FILE, index=False)
 
 
 def load_bookings():
@@ -41,38 +41,66 @@ def save_bookings(df):
     df.to_csv(BOOKINGS_FILE, index=False)
 
 
+def reset_if_needed():
+    if not os.path.exists(BOOKINGS_FILE):
+        return
+
+    df_b = pd.read_csv(BOOKINGS_FILE)
+    if df_b.empty:
+        return
+
+    training = get_training_date()
+
+    if datetime.now() > training + timedelta(hours=1):
+        pd.DataFrame(columns=["user_id", "status", "date"]).to_csv(BOOKINGS_FILE, index=False)
+
+
 # =========================
-# 📅 ВРЕМЯ ТРЕНИРОВКИ
+# 📅 ДАТА ТРЕНИРОВКИ
 # =========================
-def get_training_datetime():
+def get_training_date():
     now = datetime.now()
-    days_ahead = (TRAINING_DAY - now.weekday()) % 7
-    training = now + timedelta(days=days_ahead)
+    days = (TRAINING_DAY - now.weekday()) % 7
+    training = now + timedelta(days=days)
     return training.replace(hour=TRAINING_HOUR, minute=0, second=0)
 
 
 # =========================
 # 📅 НЕДЕЛЯ
 # =========================
-def get_current_week():
-    day = datetime.now().day
-    return f"Неделя {min((day-1)//7 + 1, 4)}"
+def get_week_info():
+    today = datetime.now()
+
+    start = today - timedelta(days=today.weekday())
+    end = start + timedelta(days=6)
+
+    week_num = min((today.day - 1)//7 + 1, 4)
+
+    return {
+        "week_label": f"{start.strftime('%d.%m')}–{end.strftime('%d.%m')}",
+        "week_num": f"Неделя {week_num}"
+    }
 
 
 # =========================
-# 📊 ПРОГРАММА (FIX)
+# 📊 ПРОГРАММА
 # =========================
 def get_program():
-    week = get_current_week()
+    info = get_week_info()
 
-    # находим колонку "Неделя"
     week_col = [col for col in df.columns if col[0] == "Неделя"][0]
 
-    rows = df[df[week_col] == week]
+    rows = df[df[week_col] == info["week_num"]]
+
+    if rows.empty:
+        return {}, info
+
+    row = rows.iloc[0]
 
     def get(cat, fit):
         try:
-            return rows[(cat, fit)].dropna().tolist()
+            val = row[(cat, fit)]
+            return [val] if pd.notna(val) else []
         except:
             return []
 
@@ -89,7 +117,7 @@ def get_program():
             "Крутки": get("Крутки", "Фит 2"),
             "Подкачка": get("Подкачка", "Фит 2"),
         }
-    }, week
+    }, info
 
 
 def format_program(data):
@@ -114,11 +142,8 @@ def main_menu(user_id):
     ]
 
     df_b = load_bookings()
-    user_id_str = str(user_id)
-
-    if user_id_str in df_b["user_id"].values:
-        if datetime.now() < get_training_datetime() - timedelta(hours=24):
-            buttons.append([InlineKeyboardButton("❌ Выписаться", callback_data="cancel")])
+    if str(user_id) in df_b["user_id"].values:
+        buttons.append([InlineKeyboardButton("❌ Выписаться", callback_data="cancel")])
 
     if user_id == ADMIN_ID:
         buttons.append([InlineKeyboardButton("👑 Админ", callback_data="admin")])
@@ -138,7 +163,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
-# 🔧 SAFE EDIT (FIX)
+# 🔧 SAFE EDIT
 # =========================
 async def safe_edit(query, text, markup=None):
     try:
@@ -158,14 +183,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = query.data
 
-    # =========================
-    # ПРОГРАММА
-    # =========================
+    # ========= ПРОГРАММА =========
     if data == "week":
-        _, week = get_program()
+        _, info = get_program()
 
         await safe_edit(query,
-            f"<b>{week}</b>\nВыбери:",
+            f"<b>{info['week_label']}</b>\n{info['week_num']}\n\nВыбери:",
             InlineKeyboardMarkup([
                 [InlineKeyboardButton("Фит 1", callback_data="fit1")],
                 [InlineKeyboardButton("Фит 2", callback_data="fit2")],
@@ -184,9 +207,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
 
-    # =========================
-    # ЗАПИСЬ (FIX)
-    # =========================
+    # ========= ЗАПИСЬ =========
     elif data == "book":
         await safe_edit(query,
             "Выбери занятие:",
@@ -198,22 +219,31 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "thu":
+        reset_if_needed()
+
         df_b = load_bookings()
         user_id_str = str(user_id)
+        training = get_training_date()
 
         if user_id_str in df_b["user_id"].values:
-            await query.answer("Ты уже записана (o˘◡˘o)", show_alert=True)
+            await query.answer(
+                f"Ты записана на {training.strftime('%d.%m')} в 21:00",
+                show_alert=True
+            )
             return
 
         main = df_b[df_b["status"] == "main"]
         status = "main" if len(main) < MAX_PLACES else "queue"
 
-        new = pd.DataFrame([[user_id_str, status, datetime.now()]], columns=df_b.columns)
+        new = pd.DataFrame([[user_id_str, status, training]], columns=df_b.columns)
         df_b = pd.concat([df_b, new])
         save_bookings(df_b)
 
         if status == "main":
-            await safe_edit(query, "Ура! Жду на тренировке ＼(￣▽￣)／", back())
+            await safe_edit(query,
+                f"Ура! Жду на тренировке 💪\n{training.strftime('%d.%m')} 21:00",
+                back()
+            )
         else:
             pos = len(df_b[df_b["status"] == "queue"])
             await safe_edit(query, f"Ты в очереди №{pos}", back())
@@ -223,27 +253,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         df_b = df_b[df_b["user_id"] != str(user_id)]
         save_bookings(df_b)
 
-        await safe_edit(query, "Ты выписана(ಥ﹏ಥ) ", back())
+        await safe_edit(query, "Ты выписана", back())
 
-    # =========================
-    # АДМИН
-    # =========================
+    # ========= АДМИН =========
     elif data == "admin" and user_id == ADMIN_ID:
         df_b = load_bookings()
 
         main = df_b[df_b["status"] == "main"]["user_id"].tolist()
         queue = df_b[df_b["status"] == "queue"]["user_id"].tolist()
 
-        text = "👑 Запись:\n\nОсновной:\n"
-        text += "\n".join(map(str, main)) or "нет"
-
-        text += "\n\nОчередь:\n"
-        text += "\n".join(map(str, queue)) or "нет"
+        text = "👑 Основной:\n" + ("\n".join(main) or "нет")
+        text += "\n\nОчередь:\n" + ("\n".join(queue) or "нет")
 
         await safe_edit(query, text, back())
 
     elif data == "info":
-        await safe_edit(query, "Это бот для тренировок у Лизы по цикличной программе 💪", back())
+        await safe_edit(query, "Это бот для тренировок 💪", back())
 
     elif data == "back":
         await safe_edit(query, "Главное меню", main_menu(user_id))
