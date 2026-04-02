@@ -11,6 +11,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes
+    BadRequest
 )
 
 # =========================
