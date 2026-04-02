@@ -37,7 +37,6 @@ def get_current_week():
 # 📊 ПОЛУЧЕНИЕ ПРОГРАММЫ
 # =========================
 def get_program():
-    def get_program():
     week = get_current_week()
     rows = df[df["Неделя"] == week]
 
