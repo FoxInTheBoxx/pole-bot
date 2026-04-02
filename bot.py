@@ -12,14 +12,14 @@ TOKEN = "8724044213:AAHzltZdQnaSn_ou30Ohbd8v2rDtPpyuG1Q"
 ADMIN_ID = 705855212
 
 MAX_PLACES = 6
-TRAINING_DAY = 3  # четверг (0=понедельник)
+TRAINING_DAY = 3
 TRAINING_HOUR = 21
 
 # =========================
 # 📊 ЗАГРУЗКА ПРОГРАММЫ
 # =========================
 df = pd.read_excel("fox_pole_pro.xlsx", header=[0, 1])
-df.columns = df.columns.map(lambda x: (x[0].strip(), x[1].strip()))
+df.columns = df.columns.map(lambda x: (str(x[0]).strip(), str(x[1]).strip()))
 
 # =========================
 # 📁 БАЗА ЗАПИСИ
@@ -31,7 +31,10 @@ if not os.path.exists(BOOKINGS_FILE):
 
 
 def load_bookings():
-    return pd.read_csv(BOOKINGS_FILE)
+    df = pd.read_csv(BOOKINGS_FILE)
+    if not df.empty:
+        df["user_id"] = df["user_id"].astype(str)
+    return df
 
 
 def save_bookings(df):
@@ -57,14 +60,21 @@ def get_current_week():
 
 
 # =========================
-# 📊 ПРОГРАММА
+# 📊 ПРОГРАММА (FIX)
 # =========================
 def get_program():
     week = get_current_week()
-    rows = df[df[("Неделя", "")] == week]
+
+    # находим колонку "Неделя"
+    week_col = [col for col in df.columns if col[0] == "Неделя"][0]
+
+    rows = df[df[week_col] == week]
 
     def get(cat, fit):
-        return rows[(cat, fit)].dropna().tolist()
+        try:
+            return rows[(cat, fit)].dropna().tolist()
+        except:
+            return []
 
     return {
         "Фит 1": {
@@ -104,7 +114,9 @@ def main_menu(user_id):
     ]
 
     df_b = load_bookings()
-    if user_id in df_b["user_id"].values:
+    user_id_str = str(user_id)
+
+    if user_id_str in df_b["user_id"].values:
         if datetime.now() < get_training_datetime() - timedelta(hours=24):
             buttons.append([InlineKeyboardButton("❌ Выписаться", callback_data="cancel")])
 
@@ -126,15 +138,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
-# 🔘 ОБРАБОТКА
+# 🔧 SAFE EDIT (FIX)
 # =========================
 async def safe_edit(query, text, markup=None):
     try:
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
-    except BadRequest:
-        pass
+    except BadRequest as e:
+        if "Message is not modified" not in str(e):
+            raise e
 
 
+# =========================
+# 🔘 ОБРАБОТКА
+# =========================
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -169,7 +185,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     # =========================
-    # ЗАПИСЬ
+    # ЗАПИСЬ (FIX)
     # =========================
     elif data == "book":
         await safe_edit(query,
@@ -183,30 +199,31 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "thu":
         df_b = load_bookings()
+        user_id_str = str(user_id)
 
-        if user_id in df_b["user_id"].values:
-            await query.answer("Ты уже записана (o˘◡˘o)")
+        if user_id_str in df_b["user_id"].values:
+            await query.answer("Ты уже записана (o˘◡˘o)", show_alert=True)
             return
 
         main = df_b[df_b["status"] == "main"]
         status = "main" if len(main) < MAX_PLACES else "queue"
 
-        new = pd.DataFrame([[user_id, status, datetime.now()]], columns=df_b.columns)
+        new = pd.DataFrame([[user_id_str, status, datetime.now()]], columns=df_b.columns)
         df_b = pd.concat([df_b, new])
         save_bookings(df_b)
 
         if status == "main":
-            await safe_edit(query, "Ура! Жду на тренировке (o˘◡˘o)", back())
+            await safe_edit(query, "Ура! Жду на тренировке ＼(￣▽￣)／", back())
         else:
             pos = len(df_b[df_b["status"] == "queue"])
             await safe_edit(query, f"Ты в очереди №{pos}", back())
 
     elif data == "cancel":
         df_b = load_bookings()
-        df_b = df_b[df_b["user_id"] != user_id]
+        df_b = df_b[df_b["user_id"] != str(user_id)]
         save_bookings(df_b)
 
-        await safe_edit(query, "Вжух и ты выписан!", back())
+        await safe_edit(query, "Ты выписана(ಥ﹏ಥ) ", back())
 
     # =========================
     # АДМИН
@@ -226,7 +243,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_edit(query, text, back())
 
     elif data == "info":
-        await safe_edit(query, "Это бот для тренировок 💪", back())
+        await safe_edit(query, "Это бот для тренировок у Лизы по цикличной программе 💪", back())
 
     elif data == "back":
         await safe_edit(query, "Главное меню", main_menu(user_id))
